@@ -76,21 +76,15 @@ namespace Leaderboard.Api.Services
             try
             {
                 var response = new LeaderboardResponse();
-                int currentRank = 1;
-                int count = 0;
 
-                foreach (var customer in _leaderboard)
+                var currentRank = start;
+                var customersInRange = _leaderboard
+                    .Skip(start - 1)  
+                    .Take(end - start + 1); 
+                foreach (var customer in customersInRange)
                 {
-                    if (currentRank > end) break;
-
-                    if (currentRank >= start && currentRank <= end)
-                    {
-                        response.Customers.Add(new CustomerRank(customer.CustomerID, customer.Score, currentRank));
-                        count++;
-                    }
+                    response.Customers.Add(new CustomerRank(customer.CustomerID, customer.Score, currentRank));
                     currentRank++;
-
-                    if (count >= (end - start + 1)) break;
                 }
 
                 return response;
