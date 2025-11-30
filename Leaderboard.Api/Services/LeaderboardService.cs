@@ -7,7 +7,7 @@ namespace Leaderboard.Api.Services
     {
         private readonly ConcurrentDictionary<long, Customer> _customers = new();
         private readonly SortedSet<Customer> _leaderboard;
-        private readonly ReaderWriterLockSlim _lock = new();
+        private readonly object _leaderboardLock = new();
 
         public LeaderboardService()
         {
@@ -29,42 +29,40 @@ namespace Leaderboard.Api.Services
             if (scoreChange < -1000 || scoreChange > 1000)
                 throw new ArgumentException($"{scoreChange} must be between -1000 and +1000", nameof(scoreChange));
 
-            _lock.EnterWriteLock();
-            try
+
+            if (_customers.TryGetValue(customerId, out var existingCustomer))
             {
-                if (_customers.TryGetValue(customerId, out var existingCustomer))
+                lock (_leaderboardLock)
                 {
-                    _leaderboard.Remove(existingCustomer);
-
-                    decimal newScore = existingCustomer.Score + scoreChange;
-                    var updatedCustomer = new Customer(customerId, newScore);
-
-                    _customers[customerId] = updatedCustomer;
-                    if (newScore > 0)
+                    if (_customers.TryGetValue(customerId, out existingCustomer))
                     {
-                        _leaderboard.Add(updatedCustomer);
+                        _leaderboard.Remove(existingCustomer);
+                        decimal newScore = existingCustomer.Score + scoreChange;
+                        var updatedCustomer = new Customer(customerId, newScore);
+                        _customers[customerId] = updatedCustomer;
+
+                        if (newScore > 0)
+                        {
+                            _leaderboard.Add(updatedCustomer);
+                        }
+
+                        return newScore;
                     }
-
-                    return newScore;
-                }
-                else
-                {
-                    decimal newScore = scoreChange;
-                    var newCustomer = new Customer(customerId, newScore);
-
-                    _customers[customerId] = newCustomer;
-                    if (newScore > 0)
-                    {
-                        _leaderboard.Add(newCustomer);
-                    }
-
-                    return newScore;
                 }
             }
-            finally
+
+            var finalScore = scoreChange;
+            var newCustomer = new Customer(customerId, finalScore);
+            _customers[customerId] = newCustomer;
+            lock (_leaderboardLock)
             {
-                _lock.ExitWriteLock();
+                if (finalScore > 0)
+                {
+                    _leaderboard.Add(newCustomer);
+                }
             }
+
+            return finalScore;
         }
 
         public LeaderboardResponse GetCustomersByRank(int start, int end)
@@ -72,14 +70,9 @@ namespace Leaderboard.Api.Services
             if (start <= 0 || end <= 0 || end < start)
                 throw new ArgumentException($"{nameof(start)} and {nameof(end)} must be positive integers with {nameof(start)} <= {nameof(end)}");
 
-            _lock.EnterReadLock();
-            try
+            lock (_leaderboardLock)
             {
                 return GetCustomersByRankInternal(start, end);
-            }
-            finally
-            {
-                _lock.ExitReadLock();
             }
         }
 
@@ -91,8 +84,7 @@ namespace Leaderboard.Api.Services
             if (high < 0 || low < 0)
                 throw new ArgumentException($"{nameof(high)} and {nameof(low)} must be non-negative");
 
-            _lock.EnterReadLock();
-            try
+            lock (_leaderboardLock)
             {
                 int targetRank = GetCustomerRank(customerId);
                 if (targetRank == -1)
@@ -103,10 +95,7 @@ namespace Leaderboard.Api.Services
 
                 return GetCustomersByRankInternal(startRank, endRank);
             }
-            finally
-            {
-                _lock.ExitReadLock();
-            }
+
 
             int GetCustomerRank(long customerId)
             {

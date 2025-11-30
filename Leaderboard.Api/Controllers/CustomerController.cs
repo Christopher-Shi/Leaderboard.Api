@@ -6,12 +6,10 @@ namespace Leaderboard.Api.Controllers
     public class CustomerController : BaseController
     {
         private readonly ILeaderboardService _leaderboardService;
-        private readonly ILogger<CustomerController> _logger;
 
-        public CustomerController(ILeaderboardService leaderboardService, ILogger<CustomerController> logger)
+        public CustomerController(ILeaderboardService leaderboardService)
         {
             _leaderboardService = leaderboardService;
-            _logger = logger;
         }
 
         [HttpPost("{customerId}/score/{score}")]

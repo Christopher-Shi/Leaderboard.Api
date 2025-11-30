@@ -7,12 +7,10 @@ namespace Leaderboard.Api.Controllers
     public class LeaderboardController : BaseController
     {
         private readonly ILeaderboardService _leaderboardService;
-        private readonly ILogger<LeaderboardController> _logger;
 
-        public LeaderboardController(ILeaderboardService leaderboardService, ILogger<LeaderboardController> logger)
+        public LeaderboardController(ILeaderboardService leaderboardService)
         {
             _leaderboardService = leaderboardService;
-            _logger = logger;
         }
 
         [HttpGet]
