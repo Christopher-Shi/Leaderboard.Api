@@ -75,19 +75,7 @@ namespace Leaderboard.Api.Services
             _lock.EnterReadLock();
             try
             {
-                var response = new LeaderboardResponse();
-
-                var currentRank = start;
-                var customersInRange = _leaderboard
-                    .Skip(start - 1)  
-                    .Take(end - start + 1); 
-                foreach (var customer in customersInRange)
-                {
-                    response.Customers.Add(new CustomerRank(customer.CustomerID, customer.Score, currentRank));
-                    currentRank++;
-                }
-
-                return response;
+                return GetCustomersByRankInternal(start, end);
             }
             finally
             {
@@ -113,7 +101,7 @@ namespace Leaderboard.Api.Services
                 int startRank = Math.Max(1, targetRank - high);
                 int endRank = targetRank + low;
 
-                return GetCustomersByRank(startRank, endRank);
+                return GetCustomersByRankInternal(startRank, endRank);
             }
             finally
             {
@@ -136,29 +124,24 @@ namespace Leaderboard.Api.Services
 
                 return -1;
             }
+        }
 
-            LeaderboardResponse GetCustomersByRank(int start, int end)
+        private LeaderboardResponse GetCustomersByRankInternal(int start, int end)
+        {
+            var response = new LeaderboardResponse();
+
+            var customersInRange = _leaderboard
+                .Skip(start - 1)
+                .Take(end - start + 1);
+
+            int currentRank = start;
+            foreach (var customer in customersInRange)
             {
-                var response = new LeaderboardResponse();
-                int currentRank = 1;
-                int count = 0;
-
-                foreach (var customer in _leaderboard)
-                {
-                    if (currentRank > end) break;
-
-                    if (currentRank >= start && currentRank <= end)
-                    {
-                        response.Customers.Add(new CustomerRank(customer.CustomerID, customer.Score, currentRank));
-                        count++;
-                    }
-                    currentRank++;
-
-                    if (count >= (end - start + 1)) break;
-                }
-
-                return response;
+                response.Customers.Add(new CustomerRank(customer.CustomerID, customer.Score, currentRank));
+                currentRank++;
             }
+
+            return response;
         }
     }
 }
