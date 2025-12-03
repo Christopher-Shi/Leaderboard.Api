@@ -7,7 +7,8 @@ namespace Leaderboard.Api.Services
     {
         private readonly ConcurrentDictionary<long, Customer> _customers = new();
         private readonly SortedSet<Customer> _leaderboard;
-        private readonly object _leaderboardLock = new();
+        private readonly object _leaderboardUpdateLock = new();
+        private readonly object _leaderboardQueryLock = new();
 
         public LeaderboardService()
         {
@@ -29,40 +30,34 @@ namespace Leaderboard.Api.Services
             if (scoreChange < -1000 || scoreChange > 1000)
                 throw new ArgumentException($"{scoreChange} must be between -1000 and +1000", nameof(scoreChange));
 
-
-            if (_customers.TryGetValue(customerId, out var existingCustomer))
+            lock (_leaderboardUpdateLock)
             {
-                lock (_leaderboardLock)
-                {
-                    if (_customers.TryGetValue(customerId, out existingCustomer))
+                var result = _customers.AddOrUpdate(
+                    customerId,
+                    id =>
                     {
-                        _leaderboard.Remove(existingCustomer);
-                        decimal newScore = existingCustomer.Score + scoreChange;
-                        var updatedCustomer = new Customer(customerId, newScore);
-                        _customers[customerId] = updatedCustomer;
+                        var newCustomer = new Customer(id, scoreChange);
+                        if (scoreChange > 0)
+                        {
+                            _leaderboard.Add(newCustomer);
+                        }
+                        return newCustomer;
+                    },
+                    (id, existing) =>
+                    {
+                        _leaderboard.Remove(existing);
+                        decimal newScore = existing.Score + scoreChange;
+                        var updatedCustomer = new Customer(id, newScore);
 
                         if (newScore > 0)
                         {
                             _leaderboard.Add(updatedCustomer);
                         }
+                        return updatedCustomer;
+                    });
 
-                        return newScore;
-                    }
-                }
+                return result.Score;
             }
-
-            var finalScore = scoreChange;
-            var newCustomer = new Customer(customerId, finalScore);
-            _customers[customerId] = newCustomer;
-            lock (_leaderboardLock)
-            {
-                if (finalScore > 0)
-                {
-                    _leaderboard.Add(newCustomer);
-                }
-            }
-
-            return finalScore;
         }
 
         public LeaderboardResponse GetCustomersByRank(int start, int end)
@@ -70,7 +65,7 @@ namespace Leaderboard.Api.Services
             if (start <= 0 || end <= 0 || end < start)
                 throw new ArgumentException($"{nameof(start)} and {nameof(end)} must be positive integers with {nameof(start)} <= {nameof(end)}");
 
-            lock (_leaderboardLock)
+            lock (_leaderboardQueryLock)
             {
                 return GetCustomersByRankInternal(start, end);
             }
@@ -84,7 +79,7 @@ namespace Leaderboard.Api.Services
             if (high < 0 || low < 0)
                 throw new ArgumentException($"{nameof(high)} and {nameof(low)} must be non-negative");
 
-            lock (_leaderboardLock)
+            lock (_leaderboardQueryLock)
             {
                 int targetRank = GetCustomerRank(customerId);
                 if (targetRank == -1)
@@ -117,18 +112,14 @@ namespace Leaderboard.Api.Services
 
         private LeaderboardResponse GetCustomersByRankInternal(int start, int end)
         {
-            var response = new LeaderboardResponse();
-
-            var customersInRange = _leaderboard
-                .Skip(start - 1)
-                .Take(end - start + 1);
-
-            int currentRank = start;
-            foreach (var customer in customersInRange)
+            var response = new LeaderboardResponse
             {
-                response.Customers.Add(new CustomerRank(customer.CustomerID, customer.Score, currentRank));
-                currentRank++;
-            }
+                Customers = _leaderboard
+                    .Skip(start - 1)
+                    .Take(end - start + 1)
+                    .Select((customer, index) => new CustomerRank(customer.CustomerID, customer.Score, start + index))
+                    .ToList()
+            };
 
             return response;
         }
