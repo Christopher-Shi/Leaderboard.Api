@@ -70,10 +70,7 @@ namespace Leaderboard.Api.Services
             if (start <= 0 || end <= 0 || end < start)
                 throw new ArgumentException($"{nameof(start)} and {nameof(end)} must be positive integers with {nameof(start)} <= {nameof(end)}");
 
-            lock (_leaderboardLock)
-            {
-                return GetCustomersByRankInternal(start, end);
-            }
+            return GetCustomersByRankInternal(start, end);
         }
 
         public LeaderboardResponse GetCustomerNeighbors(long customerId, int high, int low)
@@ -84,17 +81,14 @@ namespace Leaderboard.Api.Services
             if (high < 0 || low < 0)
                 throw new ArgumentException($"{nameof(high)} and {nameof(low)} must be non-negative");
 
-            lock (_leaderboardLock)
-            {
-                int targetRank = GetCustomerRank(customerId);
-                if (targetRank == -1)
-                    throw new KeyNotFoundException($"{nameof(customerId)} not found in leaderboard");
+            int targetRank = GetCustomerRank(customerId);
+            if (targetRank == -1)
+                throw new KeyNotFoundException($"{nameof(customerId)} not found in leaderboard");
 
-                int startRank = Math.Max(1, targetRank - high);
-                int endRank = targetRank + low;
+            int startRank = Math.Max(1, targetRank - high);
+            int endRank = targetRank + low;
 
-                return GetCustomersByRankInternal(startRank, endRank);
-            }
+            return GetCustomersByRankInternal(startRank, endRank);
 
 
             int GetCustomerRank(long customerId)
